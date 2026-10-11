@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#4f6bed">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="课程表">
+<title>课程表</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="weeknav">
+    <button id="prevWeek" class="icon-btn" aria-label="上一周">‹</button>
+    <button id="weekLabel" class="week-label" title="点击回到本周">第 1 周</button>
+    <button id="nextWeek" class="icon-btn" aria-label="下一周">›</button>
+  </div>
+  <div class="sub" id="subLabel"></div>
+  <nav class="actions">
+    <button id="btnImport" class="btn primary">导入</button>
+    <button id="btnAdd" class="btn">＋ 添加</button>
+    <button id="btnMore" class="btn">更多</button>
+  </nav>
+</header>
+
+<main>
+  <div id="grid" class="grid" aria-label="课程表"></div>
+  <div id="empty" class="empty hidden">
+    <p>还没有课程</p>
+    <p class="muted">点击「导入」从正方教务导入，或「＋ 添加」手动录入</p>
+  </div>
+</main>
+
+<!-- 课程详情 -->
+<dialog id="dlgDetail">
+  <form method="dialog" class="card">
+    <h3 id="dName"></h3>
+    <dl id="dBody" class="kv"></dl>
+    <div id="dOthers"></div>
+    <div class="row-end">
+      <button value="delete" class="btn danger" id="dDel">删除</button>
+      <button value="edit" class="btn" id="dEdit">编辑</button>
+      <button value="close" class="btn primary">关闭</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 添加/编辑 -->
+<dialog id="dlgEdit">
+  <form method="dialog" class="card" id="editForm">
+    <h3 id="eTitle">添加课程</h3>
+    <label>课程名称<input name="name" required maxlength="60"></label>
+    <div class="two">
+      <label>教师<input name="teacher" maxlength="40"></label>
+      <label>地点<input name="location" maxlength="60"></label>
+    </div>
+    <div class="three">
+      <label>星期<select name="day"></select></label>
+      <label>开始节<select name="start"></select></label>
+      <label>结束节<select name="end"></select></label>
+    </div>
+    <label>周次 <span class="muted">如 1-16周、1-8周,10-16周、1-15周(单)</span><input name="weeks" required placeholder="1-16周"></label>
+    <div class="quick-weeks">
+      <button type="button" data-q="all">全部</button><button type="button" data-q="odd">单周</button><button type="button" data-q="even">双周</button>
+    </div>
+    <label>颜色<input type="color" name="color"></label>
+    <label>备注<input name="note" maxlength="200"></label>
+    <p class="err" id="eErr"></p>
+    <div class="row-end">
+      <button type="button" class="btn" onclick="this.closest('dialog').close()">取消</button>
+      <button value="save" class="btn primary" id="eSave">保存</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 导入 -->
+<dialog id="dlgImport" class="wide">
+  <div class="card">
+    <h3>从正方教务导入</h3>
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-tab="tScript">① 一键脚本（推荐）</button>
+      <button class="tab" data-tab="tPaste">② 粘贴 / 上传</button>
+    </div>
+
+    <section id="tScript" class="tabpane">
+      <div class="two">
+        <label>学年<select id="sXnm"></select></label>
+        <label>学期<select id="sXqm"><option value="3">第一学期（秋季）</option><option value="12">第二学期（春季）</option><option value="16">第三学期（夏季）</option></select></label>
+      </div>
+      <ol class="steps">
+        <li>用<b>电脑浏览器</b>登录你学校的正方教务系统（网址里通常有 <code>jwglxt</code>），停留在登录后的任意页面。</li>
+        <li>按 <kbd>F12</kbd> 打开开发者工具 → 切到「控制台 / Console」。</li>
+        <li>点下面的「复制脚本」，粘贴到控制台回车（Chrome 首次粘贴可能要求先输入 <code>allow pasting</code>）。</li>
+        <li>脚本会自动下载 <code>正方课表_学年_学期.json</code> 并尝试复制到剪贴板。</li>
+        <li>回到本页「② 粘贴 / 上传」，选择该文件或直接粘贴即可。</li>
+      </ol>
+      <pre id="scriptBox" class="code"></pre>
+      <div class="row-end"><button class="btn primary" id="copyScript">复制脚本</button></div>
+      <details>
+        <summary>用书签（Bookmarklet）方式</summary>
+        <p class="muted">把下面这个链接拖到书签栏（或新建书签并把网址改成复制的内容），登录正方后点击该书签即可。手机浏览器可新建书签，网址粘贴后在正方页面地址栏输入书签名触发。</p>
+        <p><a id="bmLink" class="bm" href="#">📅 导出正方课表</a> <button class="btn small" id="copyBm">复制书签网址</button></p>
+      </details>
+      <details>
+        <summary>手动从开发者工具拿 JSON</summary>
+        <p class="muted">在正方「信息查询 → 学生课表查询」页选好学年学期点查询，F12 → 网络(Network) 中找到 <code>xskbcx_cxXsgrkb.html</code>（部分学校为 <code>xskbcx_cxXsKb.html</code>）请求，复制「响应」全文粘贴到 ② 即可。</p>
+      </details>
+    </section>
+
+    <section id="tPaste" class="tabpane hidden">
+      <p class="muted">支持：新版正方课表接口 JSON（含 <code>kbList</code>）、旧版正方 <code>xskbcx.aspx</code> 课表页 HTML、新版正方课表页 HTML（右键「另存为」或查看源代码复制）、本应用的备份文件。</p>
+      <label class="file"><input type="file" id="importFile" accept=".json,.html,.htm,.txt,application/json,text/html"> 选择文件</label>
+      <textarea id="importText" rows="8" placeholder="或把 JSON / HTML 粘贴到这里"></textarea>
+      <label class="inline"><input type="checkbox" id="importReplace" checked> 替换现有课程（不勾选则追加）</label>
+      <p class="err" id="iErr"></p>
+      <div id="iPreview" class="muted"></div>
+    </section>
+    <div class="row-end">
+      <button class="btn" id="iClose">关闭</button>
+      <button class="btn primary" id="iDo">解析并导入</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- 更多 / 设置 -->
+<dialog id="dlgMore" class="wide">
+  <form method="dialog" class="card" id="setForm">
+    <h3>设置</h3>
+    <div class="two">
+      <label>开学日期（第 1 周任意一天）<input type="date" name="startDate" required></label>
+      <label>学期总周数<input type="number" name="totalWeeks" min="1" max="30" required></label>
+    </div>
+    <div class="two">
+      <label>每天节数<input type="number" name="sectionCount" min="1" max="16" required></label>
+      <label>课表名称<input name="name" maxlength="30"></label>
+    </div>
+    <label class="inline"><input type="checkbox" name="showWeekend"> 显示周六、周日</label>
+    <label class="inline"><input type="checkbox" name="showInactive"> 显示非本周课程（灰色）</label>
+    <h4>每节时间</h4>
+    <div id="timesBox" class="times"></div>
+    <div class="row-end"><button type="button" class="btn small" id="autoTimes">按第 1 节自动推算</button></div>
+    <h4>数据</h4>
+    <div class="btn-row">
+      <button type="button" class="btn" id="exportIcs">导出日历 .ics</button>
+      <button type="button" class="btn" id="exportBackup">导出备份</button>
+      <button type="button" class="btn" id="importBackup">导入备份</button>
+      <button type="button" class="btn danger" id="clearAll">清空课程</button>
+      <input type="file" id="backupFile" accept=".json" hidden>
+    </div>
+    <p class="muted small">数据只保存在本机浏览器（localStorage）。换设备请用「导出备份」。</p>
+    <div class="row-end">
+      <button type="button" class="btn" onclick="this.closest('dialog').close()">取消</button>
+      <button value="save" class="btn primary">保存设置</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast"></div>
+
+<script src="js/parsers.js"></script>
+<script src="js/zfscript.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
