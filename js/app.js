@@ -200,20 +200,74 @@
   function doImport() {
     var txt = $('importText').value;
     $('iErr').textContent = '';
+    if (!txt.trim()) { $('iErr').textContent = '还没有内容，请先点「粘贴」'; return; }
     var res;
-    try { res = P.parseAuto(txt); } catch (e) { $('iErr').textContent = '解析失败：' + e.message; return; }
-    if (res.backup) { restoreBackup(res.backup); $('dlgImport').close(); return; }
-    if (!res.courses.length) { $('iErr').textContent = '没有识别到课程。请确认内容是正方课表 JSON 或课表页面 HTML。'; return; }
-    applyImport(res.courses, $('importReplace').checked);
+    try { res = P.parseAuto(txt); } catch (e) { $('iErr').textContent = '无法识别：' + e.message; return; }
+    if (res.backup) { $('dlgImport').close(); restoreBackup(res.backup); return; }
+    if (!res.courses.length) {
+      $('iErr').textContent = res.noDay ? '识别到课程但看不出是星期几。请在教务系统把课表切换到「列表」显示，再全选复制。'
+        : '没有识别到课程。请确认复制的是教务系统「学生课表查询」页面的内容（建议切换到「列表」显示）。';
+      return;
+    }
+    $('dlgImport').close();
+    askImport(res, '');
+  }
+  /** 一键确认：替换 / 追加 */
+  var pendingImport = null;
+  function askImport(res, label) {
+    pendingImport = res;
+    var names = {}; res.courses.forEach(function (c) { names[c.name] = (names[c.name] || 0) + 1; });
+    var keys = Object.keys(names);
+    $('cSummary').innerHTML = (label ? esc(label) + '<br>' : '') + '识别到 <b>' + keys.length + '</b> 门课程（' + res.courses.length + ' 个上课时间）';
+    $('cNames').innerHTML = keys.map(function (n) { return '<span class="chip" style="--c:' + colorFor(n) + '">' + esc(n) + '</span>'; }).join('');
+    var notes = [];
+    if (res.skipped && res.skipped.length) notes.push(res.skipped.length + ' 条没有上课时间，已跳过');
+    if (res.others && res.others.length) notes.push('无固定时间：' + res.others.join('；'));
+    $('cNote').textContent = notes.join('。');
+    var has = state.courses.length > 0;
+    $('cReplace').textContent = has ? '替换现有课程' : '导入';
+    $('cAppend').classList.toggle('hidden', !has);
+    $('dlgConfirm').returnValue = '';
+    $('dlgConfirm').showModal();
+  }
+  function finishImport(mode) {
+    var res = pendingImport; pendingImport = null;
+    if (!res || (mode !== 'replace' && mode !== 'append')) return;
+    applyImport(res.courses, mode === 'replace');
     viewWeek = clampWeek(currentWeek());
     render();
-    $('dlgImport').close();
-    var msg = '已导入 ' + res.courses.length + ' 条课程安排';
-    if (res.skipped.length) msg += '，' + res.skipped.length + ' 条无时间信息已跳过';
-    if (res.others.length) msg += '；另有 ' + res.others.length + ' 门无固定时间课程';
-    toast(msg, 4000);
-    if (res.others.length) setTimeout(function () { alert('以下课程没有固定上课时间，未放入课表：\n\n' + res.others.join('\n')); }, 300);
+    $('importText').value = ''; $('iPreview').textContent = '';
+    toast('已导入 ' + res.courses.length + ' 个上课时间 ✓', 3000);
   }
+  /* 书签跳转过来：#import=<数据> */
+  var handledImport = false;
+  function importFromCompact(c) {
+    if (handledImport) return; handledImport = true;
+    try {
+      var kb = P.expandCompact(c);
+      var res = P.parseZfJson(kb);
+      var term = kb.xnm ? kb.xnm + '-' + (+kb.xnm + 1) + ' 学年' + ({ '3': '第一学期', '12': '第二学期', '16': '第三学期' }[kb.xqm] || '') : '';
+      if (!res.courses.length) { alert('教务系统返回的课表里没有可显示的课程。'); return; }
+      askImport(res, '来自教务系统' + (term ? '：' + term : ''));
+    } catch (e) { alert('导入失败：' + e.message); }
+  }
+  function checkHash() {
+    var h = location.hash || '';
+    if (h.indexOf('#import=') === 0) {
+      history.replaceState(null, '', location.pathname + location.search);
+      handledImport = false;
+      P.decodeTransfer(h.slice(8)).then(importFromCompact, function (e) { alert('导入失败：' + e.message); });
+    } else if (h === '#listen') {
+      history.replaceState(null, '', location.pathname + location.search);
+    }
+  }
+  window.addEventListener('message', function (ev) {
+    var d = ev.data;
+    if (!d || d.type !== 'tt-import' || !d.data) return;
+    try { ev.source && ev.source.postMessage({ type: 'tt-ack' }, ev.origin); } catch (e) {}
+    importFromCompact(d.data);
+  });
+  window.addEventListener('hashchange', checkHash);
   function restoreBackup(b) {
     if (!b || !Array.isArray(b.courses)) { toast('备份文件格式不正确'); return; }
     if (!confirm('将用备份覆盖当前所有课程和设置，确定吗？')) return;
@@ -264,22 +318,27 @@
   }
 
   /* ---------------- 导入脚本区 ---------------- */
+  function appUrl() {
+    if (/^https?:$/.test(location.protocol)) return location.origin + location.pathname.replace(/index\.html$/, '');
+    return window.ZfScript.DEFAULT_APP;
+  }
   function initScriptTab() {
     var sel = $('sXnm'), d = new Date(), y = d.getMonth() >= 7 ? d.getFullYear() : d.getFullYear() - 1;
+    var o0 = document.createElement('option'); o0.value = ''; o0.textContent = '自动识别'; sel.appendChild(o0);
     for (var i = y + 1; i >= y - 5; i--) { var o = document.createElement('option'); o.value = i; o.textContent = i + '-' + (i + 1) + ' 学年'; sel.appendChild(o); }
-    sel.value = y;
-    $('sXqm').value = d.getMonth() >= 7 || d.getMonth() === 0 ? '3' : '12';
     function upd() {
-      var s = window.ZfScript.consoleScript(sel.value, $('sXqm').value);
-      $('scriptBox').textContent = s;
-      $('bmLink').href = window.ZfScript.bookmarklet(sel.value, $('sXqm').value);
+      var x = sel.value, q = x ? $('sXqm').value : '';
+      $('sXqm').disabled = !x;
+      $('scriptBox').textContent = window.ZfScript.consoleScript(appUrl(), x, q);
     }
     sel.onchange = upd; $('sXqm').onchange = upd; upd();
+    $('bmLink').href = window.ZfScript.bookmarklet(appUrl());
   }
-  function copyText(t) {
-    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(t).then(function () { toast('已复制'); }, fallback);
+  function copyText(t, okMsg) {
+    okMsg = okMsg || '已复制';
+    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(t).then(function () { toast(okMsg, 3000); }, fallback);
     fallback();
-    function fallback() { var ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); toast('已复制'); } catch (e) { toast('复制失败，请手动选择复制'); } ta.remove(); }
+    function fallback() { var ta = document.createElement('textarea'); ta.value = t; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, t.length); try { document.execCommand('copy'); toast(okMsg, 3000); } catch (e) { toast('复制失败，请手动选择复制'); } ta.remove(); }
   }
 
   /* ---------------- 事件 ---------------- */
@@ -327,20 +386,40 @@
   });
   $('editForm').start.addEventListener('change', function () { var f = $('editForm'); if (+f.end.value < +f.start.value) f.end.value = f.start.value; });
 
-  $('btnImport').onclick = function () { $('iErr').textContent = ''; $('dlgImport').showModal(); };
-  $('iClose').onclick = function () { $('dlgImport').close(); };
-  $('iDo').onclick = function () {
-    if ($('tPaste').classList.contains('hidden')) { switchTab('tPaste'); return; }
-    doImport();
-  };
-  function switchTab(id) {
-    document.querySelectorAll('.tab').forEach(function (t) { t.classList.toggle('active', t.dataset.tab === id); });
-    document.querySelectorAll('.tabpane').forEach(function (p) { p.classList.toggle('hidden', p.id !== id); });
+  function openImport(pane) {
+    $('iErr').textContent = '';
+    showPane(pane || 'pHome');
+    if (!$('dlgImport').open) $('dlgImport').showModal();
   }
-  document.querySelectorAll('.tab').forEach(function (t) { t.onclick = function () { switchTab(t.dataset.tab); }; });
+  var PANE_TITLE = { pHome: '导入课表', pBm: '一键导入', pPaste: '复制粘贴导入' };
+  function showPane(id) {
+    ['pHome', 'pBm', 'pPaste'].forEach(function (p) { $(p).classList.toggle('hidden', p !== id); });
+    $('iBack').classList.toggle('invisible', id === 'pHome');
+    $('iTitle').textContent = PANE_TITLE[id];
+    $('dlgImport').querySelector('.card').scrollTop = 0;
+  }
+  $('btnImport').onclick = function () { openImport('pHome'); };
+  $('emptyImport').onclick = function () { openImport('pHome'); };
+  $('emptyAdd').onclick = function () { openEdit(null); };
+  $('goBm').onclick = function () { showPane('pBm'); };
+  $('goPaste').onclick = function () { showPane('pPaste'); };
+  $('iBack').onclick = function () { showPane('pHome'); };
+  $('iClose').onclick = function () { $('dlgImport').close(); };
+  $('iDo').onclick = doImport;
+  $('pasteBtn').onclick = function () {
+    $('iErr').textContent = '';
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      navigator.clipboard.readText().then(function (t) {
+        if (!t || !t.trim()) { $('iErr').textContent = '剪贴板是空的，请先在教务系统里全选并拷贝'; return; }
+        $('importText').value = t; preview(); doImport();
+      }, function () { $('importText').focus(); toast('请在输入框里长按，选择「粘贴」'); });
+    } else { $('importText').focus(); toast('请在输入框里长按，选择「粘贴」'); }
+  };
+  $('dlgConfirm').addEventListener('close', function () { finishImport($('dlgConfirm').returnValue); });
   $('importFile').onchange = function (e) {
     var file = e.target.files[0]; if (!file) return;
-    readFileText(file, function (txt) { $('importText').value = txt; preview(); });
+    readFileText(file, function (txt) { $('importText').value = txt; showPane('pPaste'); preview(); });
+    e.target.value = '';
   };
   function readFileText(file, cb) {
     var r = new FileReader();
@@ -363,13 +442,14 @@
     try {
       var r = P.parseAuto(t);
       if (r.backup) { box.textContent = '识别为备份文件：' + (r.backup.courses || []).length + ' 条课程'; return; }
+      if (!r.courses.length) { box.textContent = r.noDay ? '看不出星期几，请切换到「列表」显示后再复制' : '还没识别到课程'; return; }
       var names = {}; r.courses.forEach(function (c) { names[c.name] = 1; });
       box.textContent = '识别到 ' + r.courses.length + ' 条安排，' + Object.keys(names).length + ' 门课程：' + Object.keys(names).slice(0, 12).join('、') + (Object.keys(names).length > 12 ? ' …' : '');
     } catch (e) { $('iErr').textContent = '暂时无法解析：' + e.message; }
   }
   $('copyScript').onclick = function () { copyText($('scriptBox').textContent); };
-  $('copyBm').onclick = function () { copyText($('bmLink').href); };
-  $('bmLink').onclick = function (e) { e.preventDefault(); toast('请把它拖到书签栏，在正方教务页面点击'); };
+  $('copyBm').onclick = function () { copyText($('bmLink').href, '已复制书签代码，接着按第 2 步添加书签'); };
+  $('bmLink').onclick = function (e) { e.preventDefault(); toast('电脑上：把它拖到书签栏；iPad 请用上面的「复制书签代码」'); };
 
   $('btnMore').onclick = openSettings;
   $('setForm').sectionCount.addEventListener('change', function () { renderTimes(Math.max(1, Math.min(16, +this.value || 12))); });
@@ -406,9 +486,15 @@
 
   initScriptTab();
   render();
-  window.TTApp = { state: function () { return state; }, render: render, applyImport: applyImport, setWeek: function (w) { viewWeek = clampWeek(w); render(); } };
+  checkHash();
+  window.TTApp = { state: function () { return state; }, askImport: askImport, render: render, applyImport: applyImport, setWeek: function (w) { viewWeek = clampWeek(w); render(); } };
 
   if ('serviceWorker' in navigator && /^https?:/.test(location.protocol)) {
-    navigator.serviceWorker.register('sw.js').catch(function () {});
+    var hadController = !!navigator.serviceWorker.controller, reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      // 新版本接管后刷新一次（导入确认框打开时不打扰）
+      if (hadController && !reloaded && !$('dlgConfirm').open && !$('dlgImport').open && !$('dlgEdit').open) { reloaded = true; location.reload(); }
+    });
+    navigator.serviceWorker.register('sw.js').then(function (r) { r.update && r.update(); }).catch(function () {});
   }
 })();

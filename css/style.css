@@ -103,3 +103,36 @@ label.file{display:inline-flex;flex-direction:row;align-items:center;gap:8px}
   label{color:#b5bccb}
   dialog{background:var(--card)}
 }
+/* v2 导入界面 */
+.invisible{visibility:hidden}
+.center{text-align:center}
+.dlg-head{display:flex;align-items:center;gap:6px}
+.dlg-head h3{flex:1;border:none;padding:0;text-align:center}
+.dlg-head .icon-btn{font-size:26px;color:var(--muted)}
+.pane{display:flex;flex-direction:column;gap:12px}
+.big-option{display:flex;align-items:center;gap:14px;width:100%;text-align:left;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:16px;padding:18px 16px;box-shadow:0 1px 3px rgba(20,30,60,.06)}
+.big-option:hover,.big-option:active{border-color:var(--primary)}
+.big-option .emoji{font-size:34px;line-height:1}
+.big-option .txt{flex:1;display:flex;flex-direction:column;gap:4px}
+.big-option b{font-size:19px}
+.big-option small{font-size:14px;color:var(--muted)}
+.big-option .chev{font-size:28px;color:var(--muted)}
+.tag{font-style:normal;font-size:11px;font-weight:600;background:#e8edff;color:var(--primary);border-radius:10px;padding:2px 7px;vertical-align:middle}
+.adv summary{color:var(--muted);font-size:14px;padding:6px 0}
+.adv-body{display:flex;flex-direction:column;gap:8px;padding-top:6px}
+.step-card{border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:var(--bg)}
+.step-card h4{margin:0 0 6px}
+.steps.big{font-size:15px;line-height:1.75;padding-left:22px}
+.steps.big li{margin:4px 0}
+.ico{display:inline-block;background:#eef1f8;border-radius:6px;padding:0 5px;font-size:13px}
+.btn.big{padding:13px 16px;font-size:17px;border-radius:12px;width:100%}
+.btn.ghost{border-color:transparent;color:var(--muted)}
+.col-btns{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;max-height:200px;overflow:auto}
+.chip{background:var(--c);color:#fff;border-radius:12px;padding:3px 10px;font-size:13px}
+#cSummary{margin:0;font-size:15px;line-height:1.6}
+.empty{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;margin:0;padding:16px;pointer-events:none;z-index:5}
+.welcome{pointer-events:auto;background:var(--card);border-radius:18px;box-shadow:0 8px 30px rgba(20,30,60,.15);padding:24px 22px;max-width:380px;width:100%;display:flex;flex-direction:column;gap:10px;text-align:center}
+.welcome h2{margin:0;font-size:21px}
+.welcome p{margin:0}
+@media (prefers-color-scheme:dark){.step-card{background:#151922}.tag{background:#26305a}.ico{background:#2a2f3b}}

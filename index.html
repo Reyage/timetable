@@ -31,8 +31,13 @@
 <main>
   <div id="grid" class="grid" aria-label="课程表"></div>
   <div id="empty" class="empty hidden">
-    <p>还没有课程</p>
-    <p class="muted">点击「导入」从正方教务导入，或「＋ 添加」手动录入</p>
+    <div class="welcome">
+      <h2>👋 先把课表导进来吧</h2>
+      <p class="muted">登录学校的正方教务系统，一键导入；或者复制粘贴课表页面。</p>
+      <button class="btn primary big" id="emptyImport">从教务系统导入</button>
+      <button class="btn big" id="emptyAdd">手动添加课程</button>
+      <p class="muted small">小提示：Safari 分享 →「添加到主屏幕」，就能像 App 一样打开。</p>
+    </div>
   </div>
 </main>
 
@@ -81,50 +86,92 @@
 <!-- 导入 -->
 <dialog id="dlgImport" class="wide">
   <div class="card">
-    <h3>从正方教务导入</h3>
-    <div class="tabs" role="tablist">
-      <button class="tab active" data-tab="tScript">① 一键脚本（推荐）</button>
-      <button class="tab" data-tab="tPaste">② 粘贴 / 上传</button>
+    <div class="dlg-head">
+      <button class="icon-btn invisible" id="iBack" aria-label="返回">‹</button>
+      <h3 id="iTitle">导入课表</h3>
+      <button class="icon-btn" id="iClose" aria-label="关闭">×</button>
     </div>
 
-    <section id="tScript" class="tabpane">
-      <div class="two">
-        <label>学年<select id="sXnm"></select></label>
-        <label>学期<select id="sXqm"><option value="3">第一学期（秋季）</option><option value="12">第二学期（春季）</option><option value="16">第三学期（夏季）</option></select></label>
+    <section id="pHome" class="pane">
+      <button class="big-option" id="goBm">
+        <span class="emoji">⚡️</span>
+        <span class="txt"><b>一键导入 <em class="tag">推荐</em></b><small>登录教务系统后点一下书签，课表自动导进来</small></span>
+        <span class="chev">›</span>
+      </button>
+      <button class="big-option" id="goPaste">
+        <span class="emoji">📋</span>
+        <span class="txt"><b>复制粘贴</b><small>在教务系统课表页全选、拷贝，粘贴到这里</small></span>
+        <span class="chev">›</span>
+      </button>
+      <p class="muted small center">支持正方教务系统（网址里常有 jwglxt）</p>
+      <details class="adv">
+        <summary>高级</summary>
+        <div class="adv-body">
+          <h4>导入文件</h4>
+          <p class="muted small">正方课表接口 JSON（含 kbList）、课表页面 HTML（新版 / 旧版 xskbcx.aspx）、本应用的备份文件。</p>
+          <label class="file btn"><input type="file" id="importFile" accept=".json,.html,.htm,.txt,application/json,text/html" hidden>选择文件…</label>
+          <h4>电脑：控制台脚本</h4>
+          <div class="two">
+            <label>学年<select id="sXnm"></select></label>
+            <label>学期<select id="sXqm"><option value="3">第一学期（秋季）</option><option value="12">第二学期（春季）</option><option value="16">第三学期（夏季）</option></select></label>
+          </div>
+          <p class="muted small">登录正方 → F12 打开「控制台 / Console」→ 粘贴回车，会自动跳回本 App 导入。也可以把这个链接拖到书签栏：<a id="bmLink" class="bm" href="#">📅 导入课表</a></p>
+          <pre id="scriptBox" class="code"></pre>
+          <div class="row-end"><button class="btn small" id="copyScript">复制脚本</button></div>
+          <h4>手动抓取 JSON</h4>
+          <p class="muted small">在正方「学生课表查询」页点查询，开发者工具 → 网络(Network) 找到 <code>xskbcx_cxXsgrkb.html</code>（部分学校为 <code>xskbcx_cxXsKb.html</code>），复制「响应」全文，粘贴到「复制粘贴」页即可。</p>
+        </div>
+      </details>
+    </section>
+
+    <section id="pBm" class="pane hidden">
+      <div class="step-card">
+        <h4>① 第一次：添加书签 <span class="muted small">（只需一次）</span></h4>
+        <ol class="steps big">
+          <li><button class="btn primary" id="copyBm">复制书签代码</button></li>
+          <li>点 Safari 的<b>分享</b>按钮 <span class="ico">⬆︎</span> →「<b>添加书签</b>」，名称改成 <b>导入课表</b>，点「存储」。</li>
+          <li>打开<b>书签</b>（地址栏旁的 <span class="ico">📖</span> 或边栏）→「<b>编辑</b>」→ 点「导入课表」→ 把<b>地址</b>全部删掉，<b>粘贴</b>刚才复制的代码 →「完成」。</li>
+        </ol>
       </div>
-      <ol class="steps">
-        <li>用<b>电脑浏览器</b>登录你学校的正方教务系统（网址里通常有 <code>jwglxt</code>），停留在登录后的任意页面。</li>
-        <li>按 <kbd>F12</kbd> 打开开发者工具 → 切到「控制台 / Console」。</li>
-        <li>点下面的「复制脚本」，粘贴到控制台回车（Chrome 首次粘贴可能要求先输入 <code>allow pasting</code>）。</li>
-        <li>脚本会自动下载 <code>正方课表_学年_学期.json</code> 并尝试复制到剪贴板。</li>
-        <li>回到本页「② 粘贴 / 上传」，选择该文件或直接粘贴即可。</li>
-      </ol>
-      <pre id="scriptBox" class="code"></pre>
-      <div class="row-end"><button class="btn primary" id="copyScript">复制脚本</button></div>
-      <details>
-        <summary>用书签（Bookmarklet）方式</summary>
-        <p class="muted">把下面这个链接拖到书签栏（或新建书签并把网址改成复制的内容），登录正方后点击该书签即可。手机浏览器可新建书签，网址粘贴后在正方页面地址栏输入书签名触发。</p>
-        <p><a id="bmLink" class="bm" href="#">📅 导出正方课表</a> <button class="btn small" id="copyBm">复制书签网址</button></p>
-      </details>
-      <details>
-        <summary>手动从开发者工具拿 JSON</summary>
-        <p class="muted">在正方「信息查询 → 学生课表查询」页选好学年学期点查询，F12 → 网络(Network) 中找到 <code>xskbcx_cxXsgrkb.html</code>（部分学校为 <code>xskbcx_cxXsKb.html</code>）请求，复制「响应」全文粘贴到 ② 即可。</p>
-      </details>
+      <div class="step-card">
+        <h4>② 每次导入</h4>
+        <ol class="steps big">
+          <li>在 Safari 打开学校的<b>正方教务系统</b>并登录。</li>
+          <li>点地址栏，输入 <b>导入课表</b>，点下方出现的这个书签。</li>
+          <li>弹出提示点「好」→ 自动回到这里 → 点「导入」。</li>
+        </ol>
+      </div>
+      <p class="muted small">会自动识别当前学期。要导其他学期：先在教务系统「学生课表查询」页选好学年学期，再点书签。</p>
     </section>
 
-    <section id="tPaste" class="tabpane hidden">
-      <p class="muted">支持：新版正方课表接口 JSON（含 <code>kbList</code>）、旧版正方 <code>xskbcx.aspx</code> 课表页 HTML、新版正方课表页 HTML（右键「另存为」或查看源代码复制）、本应用的备份文件。</p>
-      <label class="file"><input type="file" id="importFile" accept=".json,.html,.htm,.txt,application/json,text/html"> 选择文件</label>
-      <textarea id="importText" rows="8" placeholder="或把 JSON / HTML 粘贴到这里"></textarea>
-      <label class="inline"><input type="checkbox" id="importReplace" checked> 替换现有课程（不勾选则追加）</label>
+    <section id="pPaste" class="pane hidden">
+      <ol class="steps big">
+        <li>在教务系统打开<b>学生课表查询</b>，切换成<b>列表</b>显示。</li>
+        <li>在课表文字上长按 →「<b>全选</b>」→「<b>拷贝</b>」<span class="muted">（有键盘可按 ⌘A、⌘C）</span>。</li>
+        <li>回到这里，点下面的「粘贴」。</li>
+      </ol>
+      <button class="btn primary big" id="pasteBtn">📋 粘贴并识别</button>
+      <textarea id="importText" rows="5" placeholder="也可以在这里长按 →「粘贴」，再点「识别」"></textarea>
       <p class="err" id="iErr"></p>
-      <div id="iPreview" class="muted"></div>
+      <div id="iPreview" class="muted small"></div>
+      <div class="row-end"><button class="btn" id="iDo">识别</button></div>
     </section>
-    <div class="row-end">
-      <button class="btn" id="iClose">关闭</button>
-      <button class="btn primary" id="iDo">解析并导入</button>
-    </div>
   </div>
+</dialog>
+
+<!-- 导入确认 -->
+<dialog id="dlgConfirm">
+  <form method="dialog" class="card">
+    <h3>导入课表</h3>
+    <p id="cSummary"></p>
+    <div id="cNames" class="chips"></div>
+    <p class="muted small" id="cNote"></p>
+    <div class="col-btns">
+      <button value="replace" class="btn primary big" id="cReplace">导入</button>
+      <button value="append" class="btn big" id="cAppend">追加到现有课程</button>
+      <button value="cancel" class="btn big ghost">取消</button>
+    </div>
+  </form>
 </dialog>
 
 <!-- 更多 / 设置 -->

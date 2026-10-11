@@ -126,12 +126,87 @@ test('ICS 导出', () => {
   for (const line of r.text.split('\r\n')) assert.ok(Buffer.byteLength(line) <= 75, 'line too long: ' + line);
 });
 
-test('导出脚本生成', () => {
-  const s = Z.consoleScript('2026', '3');
+test('书签 / 控制台脚本生成', () => {
+  const s = Z.consoleScript('https://reyage.github.io/timetable/', '2026', '3');
   assert.match(s, /xskbcx_cxXsgrkb\.html/);
-  assert.match(s, /\("2026","3"\);$/);
+  assert.match(s, /\("https:\/\/reyage\.github\.io\/timetable\/","2026","3"\);$/);
   new Function(s); // 语法正确
-  const b = Z.bookmarklet('2026', '12');
+  const b = Z.bookmarklet();
   assert.ok(b.startsWith('javascript:'));
-  new Function(decodeURIComponent(b.slice(11)));
+  assert.ok(!/\s/.test(b), '书签里不应有空白');
+  assert.ok(b.length < 12000, 'bookmarklet length ' + b.length);
+  const code = decodeURIComponent(b.slice(11));
+  new Function(code);
+  assert.match(code, /"https:\/\/reyage\.github\.io\/timetable\/","",""\);$/); // 默认自动识别学期
+});
+
+test('纯文字：新版「列表」视图全选复制', () => {
+  const r = P.parseAuto(fx('zf_text_list.txt'));
+  assert.equal(r.kind, 'text');
+  assert.equal(r.courses.length, 8);
+  const by = n => r.courses.find(c => c.name === n);
+  assert.deepEqual([by('数据结构').day, by('数据结构').start, by('数据结构').end, by('数据结构').location, by('数据结构').teacher], [1, 1, 2, '信息楼A305', '黄蓉']);
+  assert.deepEqual(by('数据结构').weeks, range(1, 16));
+  assert.match(by('数据结构').note, /主校区/);
+  assert.deepEqual([by('大学英语(三)').day, by('大学英语(三)').start, by('大学英语(三)').end], [1, 3, 4]);
+  assert.ok(!by('大学英语(三)').weeks.includes(9));
+  assert.deepEqual([by('大学物理实验').start, by('大学物理实验').end, by('大学物理实验').weeks], [5, 7, range(2, 16, 2)]);
+  assert.deepEqual([by('概率论与数理统计').day, by('概率论与数理统计').weeks], [2, [1, 3, 5, 7, 9, 11, 12, 13, 14, 15, 16, 17]]);
+  assert.deepEqual([by('体育(三)').day, by('体育(三)').teacher], [2, '杨过']); // 去掉【调】
+  assert.deepEqual([by('计算机组成原理').day, by('计算机组成原理').start, by('计算机组成原理').end], [3, 3, 5]);
+  assert.deepEqual([by('形势与政策').day, by('形势与政策').weeks], [5, [3, 5, 7]]);
+  assert.deepEqual([by('选修:电影赏析').day, by('选修:电影赏析').location], [7, '']);
+});
+
+test('纯文字：旧版正方课表全选复制', () => {
+  const r = P.parseAuto(fx('zf_text_old.txt'));
+  assert.equal(r.courses.length, 7);
+  const by = n => r.courses.find(c => c.name === n);
+  assert.deepEqual([by('高等数学').day, by('高等数学').teacher, by('高等数学').location], [1, '张三', 'A101']);
+  assert.deepEqual([by('大学英语').weeks, by('大学英语').weeksText], [range(1, 15, 2), '1-15周(单)']);
+  assert.deepEqual([by('英语听说').teacher, by('英语听说').location, by('英语听说').weeks], ['Smith', '语音室3', range(2, 16, 2)]);
+  assert.deepEqual([by('大学物理').day, by('大学物理').start, by('大学物理').end], [3, 3, 5]);
+  assert.deepEqual([by('选修:电影赏析').day, by('选修:电影赏析').teacher, by('选修:电影赏析').location], [7, '孙八', '']);
+});
+
+test('纯文字：「表格」视图看不出星期 → 提示改用列表', () => {
+  const r = P.parseAuto(fx('zf_text_grid.txt'));
+  assert.equal(r.courses.length, 0);
+  assert.equal(r.noDay, 2);
+});
+
+test('纯文字：带「星期/节次」标签的简单格式', () => {
+  const r = P.parseText('课程名称：操作系统\n星期：星期四\n节次：3-4节\n周次：1-16周(双)\n地点：B101\n教师：令狐冲\n课程名称：编译原理\n上课时间：星期二第5-6节{1-8周}\n教室：C202');
+  assert.equal(r.courses.length, 2);
+  const os = r.courses[0], cp = r.courses[1];
+  assert.deepEqual([os.name, os.day, os.start, os.end, os.location, os.teacher, os.weeks], ['操作系统', 4, 3, 4, 'B101', '令狐冲', range(2, 16, 2)]);
+  assert.deepEqual([cp.name, cp.day, cp.start, cp.end, cp.location, cp.weeks], ['编译原理', 2, 5, 6, 'C202', range(1, 8)]);
+});
+
+test('新版 HTML 列表视图（文字标签，无 title 属性）', () => {
+  const r = P.parseZfHtml(fx('zf_new_list_text_labels.html'));
+  assert.equal(r.courses.length, 2);
+  const ds = r.courses.find(c => c.name === '数据结构');
+  assert.deepEqual([ds.day, ds.start, ds.end, ds.location, ds.teacher, ds.weeks.length], [1, 1, 2, '信息楼A305', '黄蓉', 16]);
+  const en = r.courses.find(c => c.name === '大学英语(三)');
+  assert.deepEqual([en.start, en.end, en.weeks], [3, 4, range(1, 15, 2)]);
+});
+
+test('书签传输格式：精简 + 压缩往返', async () => {
+  const data = JSON.parse(fx('zf_kbList.json'));
+  const c = P.compactKb(data, '2026', '3');
+  const enc = await P.encodeTransfer(c);
+  assert.equal(enc[0], 'z');
+  assert.match(enc, /^[A-Za-z0-9_-]+$/);
+  assert.ok(enc.length < JSON.stringify(data).length / 2, 'compressed ' + enc.length);
+  const back = P.expandCompact(await P.decodeTransfer(enc));
+  assert.equal(back.xnm, '2026');
+  const r = P.parseZfJson(back);
+  assert.equal(r.courses.length, 9);
+  assert.deepEqual(r.others, ['创新创业实践 王老师(共16周)/第1-16周']);
+  // 未压缩的 j 前缀
+  const plain = 'j' + Buffer.from(JSON.stringify(c)).toString('base64url');
+  assert.equal(P.parseZfJson(P.expandCompact(await P.decodeTransfer(plain))).courses.length, 9);
+  await assert.rejects(P.decodeTransfer('x123'));
+  await assert.rejects(P.decodeTransfer('z!!!'));
 });
